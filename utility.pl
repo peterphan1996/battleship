@@ -1,16 +1,37 @@
+use JSON::XS qw(encode_json decode_json);
+use File::Slurp qw(read_file write_file);
 use Term::ANSIColor;
+use Term::ANSIColor 2.00 qw(:pushpop);
 use IO::Socket::INET;
 use JSON;
 use Scalar::Util qw(looks_like_number);
+use strict;
+use Data::Dumper;
+
+my %hash = ('okay' => 1);
+my @arr = ([0, 0, 0, 0, 0],[0, 0, 0, 0, 0],[0, 0, 0, 0, 0],[0, 0, 0, 0, 0],[0, 0, 0, 0, 0]);
+DecodeJson();
+
+
+sub DecodeJson {
+    my $json = read_file('dump.txt', { binmode => ':raw' });
+    %hash = %{ decode_json $json };
+}
+
+sub EncodeJson {
+    my $json = encode_json \%hash;
+    write_file('dump.txt', { binmode => ':raw' }, $json);
+}
+
 sub randnum {
-    my @arr = @_;
-   
+    my @array = @_;
     for (my $i =0; $i < 5; $i++) {
         while(1) {
             my $indexi = int(rand(5));
             my $indexj = int(rand(5));
-            if ($arr[$indexi][$indexj]!=1) {
-                $arr[$indexi][$indexj] = 1;
+            if ($array[$indexi][$indexj]!=1) {
+                $array[$indexi][$indexj] = 1;
+
                 last;
             }
             
@@ -23,23 +44,26 @@ sub randnum {
         while(1) {
             my $indexi = int(rand(5));
             my $indexj = int(rand(5));
-            if ($arr[$indexi][$indexj]!=1 && $arr[$indexi][$indexj]!=2) {
-                $arr[$indexi][$indexj] = 2;
+            if ($array[$indexi][$indexj]!=1 && $array[$indexi][$indexj]!=2) {
+                $array[$indexi][$indexj] = 2;
+                
                 last;
             }
             
         }
         
     }
-    return @arr;
-}
 
+    return @array;
+}
+    
 sub SendBattlefield {
     my @arg = @_;
     my $encoded = $arg[0];
     my $socket = $arg[1];
     # my $encoded = encode_json(\@arr);
     # $client_socket->recv($data, 1024);
+    sleep(1);
     $socket->send($encoded);
 }
 
@@ -82,47 +106,58 @@ sub ThrowDie {
     }
 }
 
-sub ServerMove {
+sub ClientMove {
+    DecodeJson();
     my @arr = @_;
     my %addressindexj = (0 => "A", 1=> "B", 2 => "C",3 => "D", 4 => "E");
     %addressindexj = reverse %addressindexj;
     my $again = 0;
+    my $inputchoose;
+    my $inputmove;
+    my $inputshoot;
+    my $index1choose;
+    my $index2choose;
+    my $index1move;
+    my $index2move;
+    my $index1shoot;
+    my $index2shoot;
     while (1) {
         while (1) {
+            print color('yellow');
             print "Choose your ship: ";
-            chomp(my $inputchoose = <STDIN>);
+            print color('reset');
+            chomp($inputchoose = <STDIN>);
             my $validinput = CheckValidCoordinate($inputchoose);
             if ($validinput eq "false") {
+                print "Invalid input !!! ";
                 next;
             }
             $index1choose = substr($inputchoose, 0, 1);
             $index2choose = substr($inputchoose, 1, 1);
-            if ($arr[$index1choose][%addressindexj{$index2choose}]==1) {
+            if ($arr[$index1choose][%addressindexj{$index2choose}]==2) {
                 last;
             }
         }
 
         while (1) {
+            print color('yellow');
             print "Choose where to move (IGNORE to re-select your ship): ";
-            chomp(my $inputmove = <STDIN>);
+            print color('reset');
+            chomp($inputmove = <STDIN>);
             my $validinput = CheckValidCoordinate($inputmove);
-            if ($validinput eq "false") {
-                next;
-            }
             if ($inputmove eq "IGNORE") {
                 $again = 1;
                 last;
             }
-
+            if ($validinput eq "false") {
+                print "Invalid input !!! ";
+                next;
+            }
+            
             $index1move = substr($inputmove, 0, 1);
             $index2move = substr($inputmove, 1, 1);
-            print "$index1move$index2move";
-            print "$inputmove$inputchoose";
             if (($index1choose == $index1move) && ($index2choose == $index2move)) {
-                print "Yes u can stay\n";
-            }
-            else {
-                print "I dont know what happens\n";
+                print "Yes you can stay\n";
             }
             if (($arr[$index1move][%addressindexj{$index2move}]==0) || (($index1choose == $index1move) && ($index2choose == $index2move))) {
                 if ((($index1move-1)==$index1choose) || (($index1move+1)==$index1choose) || ((%addressindexj{$index2move}-1)==%addressindexj{$index2choose}) || ((%addressindexj{$index2move}+1)==%addressindexj{$index2choose})){
@@ -138,24 +173,38 @@ sub ServerMove {
         }
     }
     $arr[$index1choose][%addressindexj{$index2choose}]=0;
-    $arr[$index1move][%addressindexj{$index2move}]=1;
+    $arr[$index1move][%addressindexj{$index2move}]=2;
+    $hash{$inputmove} = delete $hash{$inputchoose};
+    EncodeJson();
+    BattlefieldDisplay(@arr);
 
     while (1) {
-        print "[Server]Choose where to shoot: ";
-        chomp(my $inputmove = <STDIN>);
-        my $validinput = CheckValidCoordinate($inputmove);
+        print color('yellow');
+        print "[Client]Choose where to shoot: ";
+        print color('reset');
+        chomp($inputshoot = <STDIN>);
+        my $validinput = CheckValidCoordinate($inputshoot);
         if ($validinput eq "false") {
+            print "Invalid input !!! ";
             next;
         }
-        $index1choose = substr($inputmove, 0, 1);
-        $index2choose = substr($inputmove, 1, 1);
-        print "Index choose : $index1choose$index2choose\n";
-        print "Index choose : $index1move$index2move\n";
-        print "%addressindexj{$index2choose}\n";
-        print "%addressindexj{$index2move}\n";
-        if ((($index1move-1)==$index1choose) || (($index1move+1)==$index1choose) || ((%addressindexj{$index2move}-1)==%addressindexj{$index2choose}) || ((%addressindexj{$index2move}+1)==%addressindexj{$index2choose})) {
-                $arr[$index1choose][%addressindexj{$index2choose}] = 0;
-                print "HIT!";
+        $index1shoot = substr($inputshoot, 0, 1);
+        $index2shoot = substr($inputshoot, 1, 1);
+        # print "%addressindexj{$index2choose}\n";
+        if ((($index1move-1)==$index1shoot) || (($index1move+1)==$index1shoot) || ((%addressindexj{$index2move}-1)==%addressindexj{$index2shoot}) || ((%addressindexj{$index2move}+1)==%addressindexj{$index2shoot})) {
+                if ($arr[$index1shoot][%addressindexj{$index2shoot}] == 1) {
+                    print "TARGET HIT!\n";
+                    $hash{$inputshoot}{'HP'} = $hash{$inputshoot}{'HP'} - ($hash{$inputmove}{'Dam'} * $hash{$inputshoot}{'DamTaken'});
+                    print "Enemy has $hash{$inputshoot}{'HP'} HP left !!!\n";
+                    if ($hash{$inputshoot}{'HP'}<=0) {
+                        delete $hash{$inputshoot};
+                        $arr[$index1shoot][%addressindexj{$index2shoot}]=0;
+                    }
+                    EncodeJson();
+                }
+                else {
+                    print "No enemy at that position !!!\n";
+                }
                 last;
             
         }
@@ -164,47 +213,75 @@ sub ServerMove {
     return @arr;
 }
 
-sub ClientMove {
+sub ServerMove {
+    DecodeJson();
+
     my @arr = @_;
     my %addressindexj = (0 => "A", 1=> "B", 2 => "C",3 => "D", 4 => "E");
     %addressindexj = reverse %addressindexj;
-
+    my $again = 0;
+    my $inputchoose;
+    my $inputmove;
+    my $inputshoot;
+    my $index1choose;
+    my $index2choose;
+    my $index1move;
+    my $index2move;
+    my $index1shoot;
+    my $index2shoot;
     while (1) {
         while (1) {
+            $again = 0;
+            print color('red');
             print "Choose your ship: ";
-            chomp(my $inputchoose = <STDIN>);
+            print color('reset');
+            chomp($inputchoose = <STDIN>);
             my $validinput = CheckValidCoordinate($inputchoose);
             if ($validinput eq "false") {
+                print "Invalid input !!! ";
                 next;
             }
             $index1choose = substr($inputchoose, 0, 1);
             $index2choose = substr($inputchoose, 1, 1);
-            if ($arr[$index1choose][%addressindexj{$index2choose}]==2) {
+            if ($arr[$index1choose][%addressindexj{$index2choose}]==1) {
                 last;
             }
         }
 
         while (1) {
+            print color('red');
             print "Choose where to move (IGNORE to re-select your ship): ";
-            chomp(my $inputmove = <STDIN>);
+            print color('reset');
+            chomp($inputmove = <STDIN>);
             my $validinput = CheckValidCoordinate($inputmove);
-            if ($validinput eq "false") {
-                next;
-            }
             if ($inputmove eq "IGNORE") {
                 $again = 1;
                 last;
             }
+            if ($validinput eq "false") {
+                print "Invalid input !!! ";
+                next;
+            }
+            
             $index1move = substr($inputmove, 0, 1);
             $index2move = substr($inputmove, 1, 1);
-            print "$index1move$index2move";
+            
+            if (($index1choose == $index1move) && ($index2choose == $index2move)) {
+                print "Yes you can stay\n";
+            }
             if (($arr[$index1move][%addressindexj{$index2move}]==0) || (($index1choose == $index1move) && ($index2choose == $index2move))) {
-                if ((($index1move-1)==$index1choose) || (($index1move+1)==$index1choose) || (($index2move-1)==$index2choose) || (($index2move+1)==$index2choose)){
+                if ((($index1move-1)==$index1choose) || (($index1move+1)==$index1choose) || ((%addressindexj{$index2move}-1)==%addressindexj{$index2choose}) || ((%addressindexj{$index2move}+1)==%addressindexj{$index2choose})){
                     last;
                 }
                 elsif (($index1choose == $index1move) && ($index2choose == $index2move)) {
                     last;
                 }
+                else {
+                print "Something wrong in here\n";
+            }
+            }
+            else {
+                print "Something wrong\n";
             }
         }
         if ($again == 0) {
@@ -212,34 +289,51 @@ sub ClientMove {
         }
     }
     $arr[$index1choose][%addressindexj{$index2choose}]=0;
-    $arr[$index1move][%addressindexj{$index2move}]=2;
 
+    $arr[$index1move][%addressindexj{$index2move}]=1;
+
+    $hash{$inputmove} = delete $hash{$inputchoose};
+    EncodeJson();    
+    BattlefieldDisplay(@arr);
     while (1) {
-        print "[Client]Choose where to shoot: ";
-        chomp(my $inputmove = <STDIN>);
-        my $validinput = CheckValidCoordinate($inputmove);
+        print color('red');
+        print "[Server]Choose where to shoot: ";
+        print color('reset');
+        chomp($inputshoot = <STDIN>);
+        my $validinput = CheckValidCoordinate($inputshoot);
         if ($validinput eq "false") {
+            print "Invalid input !!! ";
             next;
         }
-        $index1choose = substr($inputmove, 0, 1);
-        $index2choose = substr($inputmove, 1, 1);
-        print "%addressindexj{$index2choose}\n";
-        if ((($index1move-1)==$index1choose) || (($index1move+1)==$index1choose) || ((%addressindexj{$index2move}-1)==%addressindexj{$index2choose}) || ((%addressindexj{$index2move}+1)==%addressindexj{$index2choose})) {
-                if ($arr[$index1choose][%addressindexj{$index2choose}] == 1) {
+        $index1shoot = substr($inputshoot, 0, 1);
+        $index2shoot = substr($inputshoot, 1, 1);
+        if ((($index1move-1)==$index1shoot) || (($index1move+1)==$index1shoot) || ((%addressindexj{$index2move}-1)==%addressindexj{$index2shoot}) || ((%addressindexj{$index2move}+1)==%addressindexj{$index2shoot})) {
+                if ($arr[$index1shoot][%addressindexj{$index2shoot}] == 2) {
                     print "TARGET HIT!\n";
+
+                    $hash{$inputshoot}{'HP'} = $hash{$inputshoot}{'HP'} - ($hash{$inputmove}{'Dam'} * $hash{$inputshoot}{'DamTaken'});
+                    print "Enemy has $hash{$inputshoot}{'HP'} HP left !!!\n";
+                    
+                    if ($hash{$inputshoot}{'HP'}<=0) {
+                        delete $hash{$inputshoot};
+                    $arr[$index1shoot][%addressindexj{$index2shoot}]=0;    
+                    }
+
+                    EncodeJson();
                 }
                 else {
-                    print "No enemy nearby\n";
+                    print "No enemy at that position !!!\n";
                 }
-                $arr[$index1choose][%addressindexj{$index2choose}] = 0;
+                
                 last;
             
         }
     }
     BattlefieldDisplay(@arr);
-    
+
     return @arr;
 }
+
 
 sub CheckEndGame {
     my @arr = @_;
@@ -273,31 +367,45 @@ sub CheckEndGame {
 sub CheckValidCoordinate {
     my @arr = @_;
     my $input = @arr[0];
-    print "Check input [$input]\n";
+    # print "Check input [$input]\n";
     my %addressindexj = (0 => "A", 1=> "B", 2 => "C",3 => "D", 4 => "E");
     %addressindexj = reverse %addressindexj;
     my $lengthinput = length($input);
-    print "length input: $lengthinput\n";
+    # print "length input: $lengthinput\n";
     if (length($input)!=2) {
         return "false";
     }
-    $index1 = substr($input, 0, 1);
-    $index2 = substr($input, 1, 1);
-    print "$index1$index2\n";
-    print "(%addressindexj{$index2}\n";
-    if (($index1>=0 && $index1<=4) && (%addressindexj{$index2}>=0 && %addressindexj{$index2}<=4)) {
+    my $index1 = substr($input, 0, 1);
+    my $index2 = substr($input, 1, 1);
+    # print "$index1$index2\n";
+    # print "($addressindexj{$index2}\n";
+    if ((looks_like_number($addressindexj{$index2})) && ($index1>=0 && $index1<=4) && (%addressindexj{$index2}>=0 && %addressindexj{$index2}<=4)) {
+        # print "OK\n";
         return "true";
     }
     else {
+        # print "NOT OK\n";
         return "false";
     }
 }
 
-sub BattlefieldDisplay {
+
+sub ConvertCoordinate {
     my @arr = @_;
+    my $coor = @arr[0];
+    my %addressindexj = (0 => "A", 1=> "B", 2 => "C",3 => "D", 4 => "E");
+    my $index1 = substr($coor, 0, 1);
+    my $index2 = substr($coor, 1, 1);
+    my $converted = $index1 . $addressindexj{$index2};
+    return $converted;
+}
+
+sub BattlefieldDisplayOnServer {
+    my @arr = @_;
+    DecodeJson();
     print "SHIP BATTLEFIELD\n\n";
     print color('bold blue');
-    print "    A    B    C    D    E\n\n";
+    print "     A      B      C      D      E\n\n";
     print color('reset');
     for (my $i =0; $i < 5; $i++) {
         my $row = $i;
@@ -306,17 +414,55 @@ sub BattlefieldDisplay {
         print color('reset');
         for (my $j = 0; $j < 5; $j++) {
             if ($arr[$i][$j] == 1) {
+                my $converted = ConvertCoordinate($i.$j);
                 print color('red');
-                print " [$arr[$i][$j]] ";
+                if ($hash{$converted}{'HP'} <100) {
+                    if ($hash{$converted}{'DamTaken'}==0.5) {
+                        print color('bold');
+                    }
+                    elsif ($hash{$converted}{'Dam'}==100) {
+                        print color('italic');;
+                    }
+                    print " [$hash{$converted}{'HP'}]! ";
+                }
+                else {
+                    if ($hash{$converted}{'DamTaken'}==0.5) {
+                        print color('bold');
+                    }
+                    elsif ($hash{$converted}{'Dam'}==100) {
+                        print color('italic');;
+                    }
+                    print " [$hash{$converted}{'HP'}] ";
+                }
+                
                 print color('reset');
             }
             elsif ($arr[$i][$j] == 2) {
+                my $converted = ConvertCoordinate($i.$j);
                 print color('yellow');
-                print " [$arr[$i][$j]] ";
+                if ($hash{$converted}{'HP'} <100) {
+                    if ($hash{$converted}{'DamTaken'}==0.5) {
+                        print color('bold');
+                    }
+                    elsif ($hash{$converted}{'Dam'}==100) {
+                        print color('italic');
+                    }
+                    print " [$hash{$converted}{'HP'}]! ";
+                }
+                else {
+                    if ($hash{$converted}{'DamTaken'}==0.5) {
+                        print color('bold');
+                    }
+                    elsif ($hash{$converted}{'Dam'}==100) {
+                        print color('italic');
+                    }
+                    print " [$hash{$converted}{'HP'}] ";
+                }
+                
                 print color('reset');
             }
             else {
-                print "  $arr[$i][$j]  ";
+                print "   $arr[$i][$j]   ";
             }
             
         }
@@ -324,4 +470,5 @@ sub BattlefieldDisplay {
 
     }
 }
+
 1

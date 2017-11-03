@@ -4,6 +4,8 @@ use JSON;
 use Storable;
 use Data::Dump qw(dump);
 use Term::ANSIColor 2.00 qw(:pushpop);
+use JSON::XS qw(encode_json decode_json);
+use File::Slurp qw(read_file write_file);
 
 # auto-flush on socket
 $| = 1;
@@ -29,9 +31,9 @@ while(1)
     my $client_port = $client_socket->peerport();
     print "connection from $client_address:$client_port\n\t";
 
-    print PUSHCOLOR RED ON_GREEN "-----------------------------------------\n";
+    print PUSHCOLOR RED ON_GREEN "-----------------------------------------";
     print color('reset');
-    print "\t";
+    print "\n\t";
     print PUSHCOLOR RED ON_GREEN " WELCOME TO BATTLE SHIP GAME VERSION 1.0 \n";
     print color('reset');
     print "\t";
@@ -40,25 +42,33 @@ while(1)
     print UNDERLINE "\nInstruction:\n\n";
     print color('reset');
     print ITALIC BRIGHT_YELLOW;
-    print "\t1. Choose coordinate on the map to move or to shoot\n";
+    print "\t1. Choose coordinate on the map to move or to shoot (for ex. : 1A, 2B, 3C)\n";
     print "\t2. Each team will have 5 ships. The one that kills all the other team's ships are the winner\n";
     print "\t3. If you have any bugs with our app, please contact with this email: peterphan_1996\@live.com\n\n";
     print color('reset');
     print "***[NOTE]: You can shoot your own ships so be careful. You can even standstill if you input the same coordinate as your chosen ship be at\n\n\n";
-    my @arr = ([0, 0, 0, 0, 0],[0, 0, 0, 0, 0],[0, 0, 0, 0, 0],[0, 0, 0, 0, 0],[0, 0, 0, 0, 0]);
-    
-    @arr = randnum(@arr);
-    BattlefieldDisplay(@arr);
+    our @arr = ([0, 0, 0, 0, 0],[0, 0, 0, 0, 0],[0, 0, 0, 0, 0],[0, 0, 0, 0, 0],[0, 0, 0, 0, 0]);
+    our %hash = ('okay' => 1);
 
+    @arr = randnum(@arr);
+    GenerateHash();
+    CreateFile();
+    print Dumper(\%hash);
+
+    print "Your ships are marked by ship's HP colored ";
+    print color('red');
+    print "red\n";
+    print color('reset');
     my $encoded = encode_json(\@arr);
     SendBattlefield($encoded,$client_socket);
 
-    # SendBattlefield(@arr,$client_socket);
-    my $result = "";
-    $result = ThrowDie();
-    print "Dice result: $result\n";
-    $client_socket->send($result);
-    if ($result eq "Server turn") {
+    BattlefieldDisplay(@arr);
+ 
+    my $dice = "";
+    $dice = ThrowDie();
+    print "Dice result: $dice\n";
+    $client_socket->send($dice);
+    if ($dice eq "Server turn") {
         # Shoot and send battlefield map
         print "Server shoot for the 1st time\n";
         @arr = ServerMove(@arr);
@@ -66,7 +76,7 @@ while(1)
         SendBattlefield($encoded,$client_socket);
 
     }
-    else {
+    elsif ($dice eq "Client turn") {
         print "Client shoot for the 1st time\n";
         my $response="";
         $client_socket->recv($response, 1024);
@@ -77,7 +87,7 @@ while(1)
 
     for (my $i = 1;;$i++) {
         print "-----\nLoop $i for Server \n";
-        if ($result eq "Server turn") {
+        if ($dice eq "Server turn") {
             if ($i%2!=0) {
                 print "Client shoot\n";
                 
@@ -129,3 +139,43 @@ while(1)
 }
  
 $socket->close();
+
+sub GenerateHash {
+    my $extradamserver = 1;
+    my $extrashieldclient = 1;
+    my $extradamclient = 1;
+    my $extrashieldserver = 1;
+    for (my $i =0; $i < 5; $i++) {     
+        for (my $j = 0; $j < 5; $j++) {
+            if (($arr[$i][$j] == 1) || ($arr[$i][$j] == 2)) {
+                my $join = $i . $j;
+                my $converted = "";
+                $converted = ConvertCoordinate($join);
+                if ($extradamserver == 1 && $arr[$i][$j] == 1) {
+                    $hash{$converted} = {'HP' => 100, 'Dam' => 100, 'DamTaken' => 1};
+                    $extradamserver++;
+                }
+                elsif ($extrashieldserver == 1 && $arr[$i][$j] == 1) {
+                    $hash{$converted} = {'HP' => 100, 'Dam' => 50, 'DamTaken' => 0.5};
+                    $extrashieldserver++;
+                }
+                elsif ($extrashieldclient == 1 && $arr[$i][$j] == 2) {
+                    $hash{$converted} = {'HP' => 100, 'Dam' => 50, 'DamTaken' => 0.5};
+                    $extrashieldclient++;
+                }
+                elsif ($extradamclient == 1 && $arr[$i][$j] == 2) {
+                    $hash{$converted} = {'HP' => 100, 'Dam' => 100, 'DamTaken' => 1};
+                    $extradamclient++
+                }
+                else {
+                    $hash{$converted} = {'HP' => 100, 'Dam' => 50, 'DamTaken' => 1};
+                }
+            }
+        }
+    }
+}
+
+sub CreateFile {
+    my $json = encode_json \%hash;
+    write_file('dump.txt', { binmode => ':raw' }, $json);
+}
